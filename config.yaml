@@ -1,0 +1,33 @@
+cameras:
+
+
+  camera_100:
+    RTSP_URL: Videos/09112024 0300.mp4
+    name: masood
+    email: masooday@gmail.com
+
+
+  camera_200:
+    RTSP_URL: Videos/07112024 2300.mp4
+    name: Uday
+    email: uday@gmail.com
+
+
+  camera_300:
+    RTSP_URL: Videos/npl.mp4
+    name: Namdeo
+    email: namdeopatil.1995@gmail.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
