@@ -2,10 +2,13 @@ import logging
 import cv2
 import time
 import numpy as np
-from pathlib import Path
 from typing import Dict, Optional
 from threading import Thread, Lock
 import queue
+import cv2
+import numpy as np
+import time
+from math import ceil, sqrt
 from math import ceil, sqrt 
 from ultralytics import YOLO
 from vidgear.gears import CamGear
@@ -130,14 +133,15 @@ class CameraProcessor:
 
 class MultiCameraSystem:
     """Manages multiple camera streams and their processing"""
-    
+
     def __init__(self, email: str):
         self.email = email
         self.camera_processors = {}
         self.is_running = False
         self.mongo_handler = MongoDBHandlerSaving()
-        self.last_frames = {}  # Store last valid frame to avoid flickering
+        self.last_frames = {}
         self._initialize_cameras()
+
 
     def _initialize_cameras(self) -> None:
         """Fetch camera details from MongoDB and initialize processors"""
@@ -155,78 +159,206 @@ class MultiCameraSystem:
                 processor = CameraProcessor(camera_id, rtsp_link)
                 processor.stream.start()
                 self.camera_processors[camera_id] = processor
-                self.last_frames[camera_id] = None  # Initialize last valid frame storage
+                self.last_frames[camera_id] = None
                 logging.info(f"Camera {camera_id}: Initialized successfully from MongoDB")
             except RabsException as e:
                 logging.error(f"Camera {camera_id}: Initialization failed: {str(e)}")
 
-    def _process_cameras(self) -> None:
-        """Main processing loop with automatic grid layout and anti-flicker adjustments"""
-        logging.info("Starting camera processing")
-        
-        num_cameras = len(self.camera_processors)
-        if num_cameras == 0:
-            logging.error("No active cameras to process")
-            return
+    def get_video_frames(self):
+        """Generator function to yield video frames as bytes for HTTP streaming"""
+        logging.info("Streaming multi-camera video frames")
 
-        grid_cols = ceil(sqrt(num_cameras))  
-        grid_rows = ceil(num_cameras / grid_cols)  
+        grid_cols = ceil(sqrt(len(self.camera_processors)))
+        grid_rows = ceil(len(self.camera_processors) / grid_cols)
+        blank_frame = np.zeros((240, 320, 3), dtype=np.uint8)
 
-        logging.info(f"Grid Layout: {grid_rows} rows x {grid_cols} columns")
-
-        while self.is_running:
+        while True:
             frames = []
-            try:
-                for camera_id, processor in self.camera_processors.items():
-                    if processor.stream.stopped:
-                        continue
-                        
-                    ret, frame = processor.stream.read()
-                    if ret:
-                        processed_frame, _ = processor.process_frame(frame)
-                        self.last_frames[camera_id] = processed_frame  # Store latest valid frame
-                    else:
-                        processed_frame = self.last_frames.get(camera_id, None)  # Use last valid frame
-                    
-                    if processed_frame is not None:
-                        frame_resized = cv2.resize(processed_frame, (320, 240))
-                        frames.append(frame_resized)
+            for camera_id, processor in self.camera_processors.items():
+                if processor.stream.stopped:
+                    continue
+                
+                ret, frame = processor.stream.read()
+                if ret:
+                    processed_frame, _ = processor.process_frame(frame)
+                    self.last_frames[camera_id] = processed_frame
+                else:
+                    processed_frame = self.last_frames.get(camera_id, blank_frame)
 
-                if len(frames) > 0:
-                    blank_frame = np.zeros((240, 320, 3), dtype=np.uint8)
-                    while len(frames) < grid_rows * grid_cols:
-                        frames.append(blank_frame)
+                frame_resized = cv2.resize(processed_frame, (320, 240))
+                frames.append(frame_resized)
 
-                    rows = [np.hstack(frames[i * grid_cols:(i + 1) * grid_cols]) for i in range(grid_rows)]
-                    grid_display = np.vstack(rows)
+            if frames:
+                while len(frames) < grid_rows * grid_cols:
+                    frames.append(blank_frame)
 
-                    cv2.imshow("Multi-Camera View", grid_display)
+                rows = [np.hstack(frames[i * grid_cols:(i + 1) * grid_cols]) for i in range(grid_rows)]
+                grid_display = np.vstack(rows)
 
-                if cv2.waitKey(10) & 0xFF == ord('q'):  # Slight delay to reduce flickering
-                    break
-                    
-            except RabsException as e:
-                logging.error(f"Main processing loop error: {str(e)}")
-                time.sleep(1)
+                _, buffer = cv2.imencode(".jpg", grid_display)
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" +
+                       buffer.tobytes() + b"\r\n")
 
-    def start(self) -> None:
-        """Start the camera system"""
-        if not self.camera_processors:
-            raise RuntimeError("No cameras were successfully initialized")
-            
-        self.is_running = True
-        # self.processing_thread = Thread(target=self._process_cameras, daemon=True)
-        # self.processing_thread.start()
-        self._process_cameras()
-        logging.info("Camera system started")
+            time.sleep(0.05)  # Small delay to control FPS
 
     def stop(self) -> None:
         """Stop the camera system"""
         self.is_running = False
         for processor in self.camera_processors.values():
             processor.stream.stop()
-        if hasattr(self, 'processing_thread'):
-            self.processing_thread.join(timeout=1.0)
         cv2.destroyAllWindows()
         logging.info("Camera system stopped")
 
+# class MultiCameraSystem:
+#     """Manages multiple camera streams and their processing"""
+    
+#     def __init__(self, email: str):
+#         self.email = email
+#         self.camera_processors = {}
+#         self.is_running = False
+#         self.mongo_handler = MongoDBHandlerSaving()
+#         self.last_frames = {}  # Store last valid frame to avoid flickering
+#         self._initialize_cameras()
+
+#     def _initialize_cameras(self) -> None:
+#         """Fetch camera details from MongoDB and initialize processors"""
+#         camera_data = self.mongo_handler.fetch_camera_rtsp_by_email(self.email)
+
+#         if not camera_data:
+#             logging.error(f"No camera data found for email: {self.email}")
+#             return
+
+#         for camera in camera_data:
+#             try:
+#                 camera_id = camera["camera_id"]
+#                 rtsp_link = camera["rtsp_link"]
+
+#                 processor = CameraProcessor(camera_id, rtsp_link)
+#                 processor.stream.start()
+#                 self.camera_processors[camera_id] = processor
+#                 self.last_frames[camera_id] = None  # Initialize last valid frame storage
+#                 logging.info(f"Camera {camera_id}: Initialized successfully from MongoDB")
+#             except RabsException as e:
+#                 logging.error(f"Camera {camera_id}: Initialization failed: {str(e)}")
+
+#     def _process_cameras(self) -> None:
+#         """Main processing loop with automatic grid layout and anti-flicker adjustments"""
+#         logging.info("Starting camera processing")
+        
+#         num_cameras = len(self.camera_processors)
+#         if num_cameras == 0:
+#             logging.error("No active cameras to process")
+#             return
+
+#         grid_cols = ceil(sqrt(num_cameras))  
+#         grid_rows = ceil(num_cameras / grid_cols)  
+
+#         logging.info(f"Grid Layout: {grid_rows} rows x {grid_cols} columns")
+
+#         while self.is_running:
+#             frames = []
+#             try:
+#                 for camera_id, processor in self.camera_processors.items():
+#                     if processor.stream.stopped:
+#                         continue
+                        
+#                     ret, frame = processor.stream.read()
+#                     if ret:
+#                         processed_frame, _ = processor.process_frame(frame)
+#                         self.last_frames[camera_id] = processed_frame  # Store latest valid frame
+#                     else:
+#                         processed_frame = self.last_frames.get(camera_id, None)  # Use last valid frame
+                    
+#                     if processed_frame is not None:
+#                         frame_resized = cv2.resize(processed_frame, (320, 240))
+#                         frames.append(frame_resized)
+
+#                 if len(frames) > 0:
+#                     blank_frame = np.zeros((240, 320, 3), dtype=np.uint8)
+#                     while len(frames) < grid_rows * grid_cols:
+#                         frames.append(blank_frame)
+
+#                     rows = [np.hstack(frames[i * grid_cols:(i + 1) * grid_cols]) for i in range(grid_rows)]
+#                     grid_display = np.vstack(rows)
+
+#                     cv2.imshow("Multi-Camera View", grid_display)
+
+#                 if cv2.waitKey(10) & 0xFF == ord('q'):  # Slight delay to reduce flickering
+#                     break
+                    
+#             except RabsException as e:
+#                 logging.error(f"Main processing loop error: {str(e)}")
+#                 time.sleep(1)
+
+#     def start(self) -> None:
+#         """Start the camera system"""
+#         if not self.camera_processors:
+#             raise RuntimeError("No cameras were successfully initialized")
+            
+#         self.is_running = True
+#         # self.processing_thread = Thread(target=self._process_cameras, daemon=True)
+#         # self.processing_thread.start()
+#         self._process_cameras()
+#         logging.info("Camera system started")
+
+#     def stop(self) -> None:
+#         """Stop the camera system"""
+#         self.is_running = False
+#         for processor in self.camera_processors.values():
+#             processor.stream.stop()
+#         if hasattr(self, 'processing_thread'):
+#             self.processing_thread.join(timeout=1.0)
+#         cv2.destroyAllWindows()
+#         logging.info("Camera system stopped")
+
+   
+class SingleCameraSystem:
+    """Manages a single camera stream and its processing"""
+    
+    def __init__(self, camera_id: int, rtsp_url: str, email: str):
+        self.email = email
+        self.camera_id = camera_id
+        self.rtsp_url = rtsp_url
+        self.processor = CameraProcessor(camera_id, rtsp_url)
+        self.mongo_handler = MongoDBHandlerSaving()
+        self.is_running = False
+        self.last_frame = None
+        
+    def start(self):
+        """Starts the single camera stream"""
+        try:
+            self.processor.stream.start()
+            self.is_running = True
+            logging.info(f"Single Camera {self.camera_id}: Stream started")
+        except RabsException as e:
+            logging.error(f"Single Camera {self.camera_id}: Failed to start: {str(e)}")
+            self.is_running = False
+
+    def get_video_frames(self):
+        """Generator function to yield video frames as bytes for HTTP streaming"""
+        logging.info(f"Streaming video frames for Single Camera {self.camera_id}")
+        blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        
+        while self.is_running:
+            ret, frame = self.processor.stream.read()
+            if ret:
+                processed_frame, _ = self.processor.process_frame(frame)
+                self.last_frame = processed_frame
+            else:
+                processed_frame = self.last_frame if self.last_frame is not None else blank_frame
+            
+            frame_resized = cv2.resize(processed_frame, (640, 480))
+            _, buffer = cv2.imencode(".jpg", frame_resized)
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" +
+                   buffer.tobytes() + b"\r\n")
+            
+            time.sleep(0.05)  # Small delay to control FPS
+    
+    def stop(self):
+        """Stops the camera stream and releases resources"""
+        self.is_running = False
+        self.processor.stream.stop()
+        cv2.destroyAllWindows()
+        logging.info(f"Single Camera {self.camera_id}: Stream stopped")
