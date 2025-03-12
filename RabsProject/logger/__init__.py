@@ -5,8 +5,6 @@ import pandas as pd
 
 
 LOG_DIR = "logs"
-
-
 def get_current_time_stamp():
     return f"{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
 
@@ -23,8 +21,7 @@ LOG_FILE_PATH = os.path.join(LOG_DIR,LOG_FILE_NAME)
 logging.basicConfig(filename = LOG_FILE_PATH,
 filemode = "w",
 format = '[%(asctime)s]---%(levelname)s---%(lineno)d---%(filename)s---%(funcName)s()---%(message)s',
-level = logging.INFO
-)
+level = logging.INFO)
 
 def get_log_dataframe(file_path):
     data = []

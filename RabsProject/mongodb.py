@@ -2,11 +2,9 @@
 import logging
 from pymongo import MongoClient
 from bcrypt import hashpw, gensalt
-
-
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 class MongoDBHandlerSaving:
     def __init__(self, url="mongodb://localhost:27017", db_name="RabsProject", user_collection_name="UserAuth"):
@@ -20,11 +18,13 @@ class MongoDBHandlerSaving:
             logger.exception("Error connecting to MongoDB")
             raise
 
+
     def close_connection(self):
         """Close the MongoDB connection."""
         if self.client:
             self.client.close()
             logger.info("MongoDB connection closed")
+
 
     @staticmethod
     def hash_password(password):
@@ -46,27 +46,24 @@ class MongoDBHandlerSaving:
                 filtered_user_data = {
                     "name": user_data.get("name", "Unknown"),  # Default to 'Unknown' if missing
                     "email": user_data["email"],
-                    # "password":user_data["password"],
 
                     "password": self.hash_password(user_data.get("password", "defaultpassword")),  
 
                     "phone_no": user_data.get("phone_no", ""),
                     "role": user_data.get("role", "user"),
-                    "cameras": user_data.get("cameras", [])
-                }
+                    "cameras": user_data.get("cameras", [])  }
 
             result = self.user_collection.update_one(
                 {"email": user_data["email"]},  # Match existing user by email
                 {"$set": filtered_user_data},  # Only update provided fields
-                upsert=True  # Insert if it doesn't exist
-            )
+                upsert=True  )
 
             if result.upserted_id:
                 logger.info(f"Created new user document for email: {user_data['email']}")
             else:
                 logger.info(f"Updated existing user document for email: {user_data['email']}")
 
-            return True  # Indicate success
+            return True  
 
         except Exception as e:
             logger.exception("Error saving user to MongoDB")
@@ -151,7 +148,6 @@ class MongoDBHandlerSaving:
             return None
 
 
-
     def has_polygonal_points(self, email):
         """Check if any camera associated with the given email has polygonal points."""
         try:
@@ -179,6 +175,9 @@ class MongoDBHandlerSaving:
 
 
 
+####################################################################################################################
+                                                ## Normal User ##
+####################################################################################################################
 
 
 
@@ -191,12 +190,13 @@ class MongoDBHandlerSaving:
 #     "cameras": [
 #         {"camera_id": "CAMERA_1", "rtsp_link": "Videos/07112024 2300.mp4"},
 #         {"camera_id": "CAMERA_2", "rtsp_link": "Videos/09112024 0300.mp4"},
-
-
-
 #     ]
 # }
 
+
+####################################################################################################################
+                                                ## Loading and Unloading User ##
+####################################################################################################################
 
 
 
@@ -222,9 +222,15 @@ class MongoDBHandlerSaving:
 # }
 
 # mongo_handler.save_user_to_mongodb(user_data)
-
-
 # camera_details = mongo_handler.fetch_camera_rtsp_by_email("johndoe@example.com")
 # print("Camera Details:", camera_details)
+
+
+
+####################################################################################################################
+                                                ## END ##
+####################################################################################################################
+
+
 
 

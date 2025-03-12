@@ -1,24 +1,19 @@
+
 from ultralytics import YOLO
 import cv2
 
-# Load a pretrained YOLO model
-model = YOLO("FireDetection/fire_detection.pt")
+model = YOLO("MODELS/train_fire_smoke/weights/best.pt")
+source = r"Videos/smoke2.mp4"
 
-# Define path to the video file
-source = r"Videos/fre.mp4"
-
-# Open video source
 cap = cv2.VideoCapture(source)
-fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Codec for saving video
+fourcc = cv2.VideoWriter_fourcc(*'XVID')  
 fps = int(cap.get(cv2.CAP_PROP_FPS))
 width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-# Output video path
 output_path = "D:/AlluviumIOT/RABSINDUSTRIES/processed_fire_tracking2.mp4"
 out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-# Process each frame with YOLO tracking
 tracker_results = model.track(source, stream=True, save=False)
 
 for result in tracker_results:
@@ -57,3 +52,15 @@ out.release()
 cv2.destroyAllWindows()
 
 print(f"Processed video with tracking saved at {output_path}")
+
+
+
+
+
+
+
+
+
+
+
+

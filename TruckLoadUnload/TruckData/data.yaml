@@ -1,0 +1,7 @@
+train: /home/ai/Desktop/RABs/TruckLoadUnload/TruckData/train
+val: /home/ai/Desktop/RABs/TruckLoadUnload/TruckData/val
+test: /home/ai/Desktop/RABs/TruckLoadUnload/TruckData/test
+
+nc: 1
+names: [0]
+

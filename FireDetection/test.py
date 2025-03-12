@@ -48,6 +48,8 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+class ModelInput(BaseModel):
+    model:str 
 class CameraInput(BaseModel):
     email: str
     camera_id: str
@@ -152,6 +154,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @app.post("/add_new_user")
 def add_user(user: UserInput):
     """API to add a new user to MongoDB"""
@@ -179,8 +182,6 @@ def add_user(user: UserInput):
         raise HTTPException(status_code=500, detail="Failed to add user")
 
 
-
-
 @app.post("/add_camera")
 def add_camera(data: CameraInput, current_user: User = Depends(get_current_active_user)):
     """Add a new camera dynamically"""
@@ -205,6 +206,7 @@ def add_camera(data: CameraInput, current_user: User = Depends(get_current_activ
     else:
         raise HTTPException(status_code=500, detail="Failed to add camera")
 
+
 @app.get("/get_cameras")
 def get_cameras(email: str, current_user: User = Depends(get_current_active_user)):
     """Get all cameras for a user"""
@@ -218,6 +220,7 @@ def get_cameras(email: str, current_user: User = Depends(get_current_active_user
     else:
         raise HTTPException(status_code=404, detail="No cameras found for this user")
     
+
 @app.delete("/remove_camera")
 def remove_camera(data: CameraInput, current_user: User = Depends(get_current_active_user)):
     """Remove a camera dynamically"""
@@ -239,10 +242,8 @@ def remove_camera(data: CameraInput, current_user: User = Depends(get_current_ac
         raise HTTPException(status_code=500, detail="Failed to remove camera")
 
 
-
-
 @app.post("/start_streaming")
-async def start_streaming(current_user: User = Depends(get_current_active_user)):
+async def start_streaming( model_input: ModelInput,current_user: User = Depends(get_current_active_user)):
     """Start multi-camera streaming in a grid and return the streaming URL with embedded token"""
     global running_camera_systems
 
@@ -250,7 +251,7 @@ async def start_streaming(current_user: User = Depends(get_current_active_user))
         raise HTTPException(status_code=400, detail="Streaming is already running for this user")
 
     # Start the streaming system
-    camera_system = MultiCameraSystem(email=current_user.email, model_path="FireDetection/fire_detection.pt")
+    camera_system = MultiCameraSystem(email=current_user.email, model_path=model_input.model)
     running_camera_systems[current_user.email] = camera_system
     
     logger.info(f"Streaming started for {current_user.email}")
@@ -271,7 +272,6 @@ async def start_streaming(current_user: User = Depends(get_current_active_user))
         "stream_url": stream_url,
         "token": streaming_token  # Include token in response for client-side use
     }
-
 
 
 @app.get("/stream")
@@ -341,7 +341,6 @@ async def stream_video(
         )
   
 
-
 @app.get("/running_cameras")
 async def running_cameras(current_user: User = Depends(get_current_user)):
     """Check which cameras are currently streaming"""
@@ -369,8 +368,9 @@ async def stop_streaming(current_user: User = Depends(get_current_user)):
 async def start_single_camera_streaming(
     camera_id: str,
     rtsp_link: str,
-    current_user: User = Depends(get_current_active_user)
-):
+    model_input: ModelInput,
+    current_user: User = Depends(get_current_active_user)): 
+
     """Start single-camera streaming and return the streaming URL with an embedded token"""
     global running_single_camera_systems
 
@@ -382,7 +382,7 @@ async def start_single_camera_streaming(
         camera_id=camera_id,
         rtsp_link=rtsp_link,
         email=current_user.email,
-        model_path="FireDetection/fire_detection.pt"
+        model_path= model_input.model
     )
     camera_system.start()
     running_single_camera_systems[current_user.email] = camera_system
